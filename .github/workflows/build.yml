@@ -6,15 +6,10 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [ubuntu-22.04, macos-14]
-        compiler: [gcc, clang]
-        crypto: [openssl, gnutls]
-        bittorrent: [with-bt, without-bt]
-        exclude:
-        - os: macos-14
-          crypto: gnutls
-        - crypto: openssl
-          bittorrent: without-bt
+        os: [ubuntu-22.04] #, macos-14]
+        compiler: [clang]
+        crypto: [openssl]
+        bittorrent: [with-bt]
 
     runs-on: ${{ matrix.os }}
 
@@ -46,14 +41,14 @@ jobs:
       if: runner.os == 'macOS'
       run: |
         brew install cppunit gettext openssl libssh2 c-ares sqlite3 \
-          autoconf automake pkg-config libtool xz
+          autoconf automake pkg-config libtool xz coreutils
     - name: Unpack and patch aria2
       run: |
         wget https://github.com/aria2/aria2/releases/download/release-1.37.0/aria2-1.37.0.tar.xz
         tar --strip-components=1 -xf aria2-1.37.0.tar.xz
         rm aria2-1.37.0.tar.xz
         patch -p1 < semicolon.patch
-        rm semicolon.patch
+        semicolon.patch
     - name: Setup clang (Linux)
       if: runner.os == 'Linux' && matrix.compiler == 'clang'
       run: |
@@ -64,16 +59,6 @@ jobs:
       run: |
         echo 'CC=clang' >> $GITHUB_ENV
         echo 'CXX=clang++' >> $GITHUB_ENV
-    - name: Setup gcc (Linux)
-      if: runner.os == 'Linux' && matrix.compiler == 'gcc'
-      run: |
-        echo 'CC=gcc-12' >> $GITHUB_ENV
-        echo 'CXX=g++-12' >> $GITHUB_ENV
-    - name: Setup gcc (MacOS)
-      if: runner.os == 'macOS' && matrix.compiler == 'gcc'
-      run: |
-        echo 'CC=gcc' >> $GITHUB_ENV
-        echo 'CXX=g++' >> $GITHUB_ENV
     - name: Libtool
       run: |
         autoreconf -i
@@ -86,16 +71,6 @@ jobs:
 
         echo 'CPPFLAGS='"$CPPFLAGS" >> $GITHUB_ENV
         echo 'LDFLAGS='"$LDFLAGS" >> $GITHUB_ENV
-    - name: Disable BitTorrent
-      if: matrix.bittorrent == 'without-bt'
-      run: |
-        FEATURE_FLAGS="$FEATURE_FLAGS --disable-bittorrent"
-
-        echo 'FEATURE_FLAGS='"$FEATURE_FLAGS" >> $GITHUB_ENV
-    - name: Configure autotools (Linux, gnutls)
-      if: runner.os == 'Linux' && matrix.crypto == 'gnutls'
-      run: |
-        ./configure --with-gnutls --without-openssl $FEATURE_FLAGS
     - name: Configure autotools (Linux, openssl)
       if: runner.os == 'Linux' && matrix.crypto == 'openssl'
       run: |
@@ -109,3 +84,31 @@ jobs:
     - name: Build aria2
       run: |
         make -j"$(nproc 2> /dev/null || sysctl -n hw.ncpu)"
+        mkdir -p binaries/$ImageOS
+        cp src/aria2c ./binaries/$ImageOS/aria2c
+    - name: compressing binaries and compute hash
+      id: computedHash
+      run: |
+        echo creating binaries.tar.xz file
+        tar -cJf binaries.tar.xz binaries semicolon.patch
+        sha1sumhash=$(sha1sum binaries.tar.xz | cut -d' ' -f1)
+        echo creating binaries.tar.xz.$sha1sumhash.SHA1 file
+        echo $sha1sumhash > binaries.tar.xz.$sha1sumhash.SHA1
+        echo "sha1sumhash=$sha1sumhash" >> "$GITHUB_OUTPUT"
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: binaries
+        path: binaries.tar.xz
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: checksum-${{ steps.computedHash.outputs.sha1sumhash }}
+        path: binaries.tar.xz.*.SHA1
+
+    - uses: softprops/action-gh-release@v1
+      with:
+        files: |
+         binaries.tar.xz
+         binaries.tar.xz.*.SHA1
+        
