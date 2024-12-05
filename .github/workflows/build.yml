@@ -51,7 +51,7 @@ jobs:
       run: |
         wget https://github.com/aria2/aria2/releases/download/release-1.37.0/aria2-1.37.0.tar.xz
         tar -xf aria2-1.37.0.tar.xz
-        cd  cd aria2-1.37.0
+        cd aria2-1.37.0
         patch -p1 < ../semicolon.patch
     - name: Setup clang (Linux)
       if: runner.os == 'Linux' && matrix.compiler == 'clang'
