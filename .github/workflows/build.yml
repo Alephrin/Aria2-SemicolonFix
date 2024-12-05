@@ -48,7 +48,6 @@ jobs:
         tar --strip-components=1 -xf aria2-1.37.0.tar.xz
         rm aria2-1.37.0.tar.xz
         patch -p1 < semicolon.patch
-        semicolon.patch
     - name: Setup clang (Linux)
       if: runner.os == 'Linux' && matrix.compiler == 'clang'
       run: |
